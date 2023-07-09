@@ -129,10 +129,7 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
   float dt;
   float desiredYaw = 0; //deg
 
-  struct mat33 inertia_J = mdiag(1.43e-5, 1.43e-5, 2.89e-5);
-  float J.x = 1.43e-5;
-  float J.y = 1.43e-5;
-  float J.z = 2.89e-5;
+  struct mat33 J = mdiag(1.43e-5, 1.43e-5, 2.89e-5);
 
   control->controlMode = controlModeLegacy;
 
@@ -294,9 +291,10 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
     vneg(mvmul(mdiag(self->kd_xy, self->kd_xy, self->kd_z), v_error)),
     vneg(mkvec(0, 0, self->mass * GRAVITY_MAGNITUDE)),
     mkvec(self->mass*setpoint->acceleration.x, self->mass*setpoint->acceleration.y, self->mass*setpoint->acceleration.z));
+  struct vec error_acc = mkvec(setpoint->acceleration.x - state->acc.x, setpoint->acceleration.y - state->acc.y, setpoint->acceleration.z - state->acc.z);
   struct vec A_dot = vadd(vneg(mvmul(mdiag(self->kp_xy, self->kp_xy, self->kp_z), v_error)),
-    vneg(mvmul(mdiag(self->kd_xy, self->kd_xy, self->kd_z), setpoint->acceleration - state->acc)));
-  struct vec A_ddot = vneg(mvmul(mdiag(self->kp_xy, self->kp_xy, self->kp_z), setpoint->acceleration - state->acc));
+    vneg(mvmul(mdiag(self->kd_xy, self->kd_xy, self->kd_z), error_acc)));
+  struct vec A_ddot = vneg(mvmul(mdiag(self->kp_xy, self->kp_xy, self->kp_z), error_acc));
 
   struct vec b_3c = vneg(vnormalize(A));
   struct vec b_3c_dot = vadd(vneg(vdiv(A_dot, vmag(A))),
@@ -306,6 +304,9 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
     vdiv(vscl((vdot(A_dot, A_dot) + vdot(A, A_ddot)), A), pow(vmag(A), 3)),
     vneg(vdiv(vscl(3, vscl(pow(vdot(A, A_dot), 2), A_dot)), pow(vmag(A), 5))));
 
+  struct vec b_1d = mzero();
+  struct vec b_1d_dot = mzero();
+  struct vec b_1d_ddot = mzero();
   struct vec b2 = vcross(b_3c, b_1d);
   struct vec b2_dot = vadd(vcross(b_3c_dot, b_1d),
     vcross(b_3c, b_1d_dot));
@@ -316,7 +317,7 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
   struct vec b_1c = vneg(vdiv(vcross(b_3c, b2), vmag(b2)));
   struct vec b_1c_dot = vadd3(vneg(vcross(b_3c_dot, b2)),
     vdiv(vcross(b_3c, b2), vmag(b2)), 
-    vdiv(vscl(vcross(b_3c, b2), vdot(b2_dot, b2)), pow(vmag(b2), 3)));
+    vdiv(vscl(vdot(b2_dot, b2), vcross(b_3c, b2)), pow(vmag(b2), 3)));
   
   struct vec m1 = vadd3(vcross(b_3c_ddot, b2),
     vscl(2, vcross(b_3c_dot, b2_dot)),
@@ -344,14 +345,14 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
   struct vec messy = mvmul(J, vsub((mmul(mmul(mmul(mcrossmat(ew), mtranspose(R)), Rc), w_c), mmul(mmul(mtranpose(R), Rc), w_c_dot))));
 
   M.x = -self->kR_xy * eR.x + self->kw_xy * ew.x + 
-    (stateAttitudeRatePitch * J.z * stateAttitudeRateYaw - 
-    stateAttitudeRateYaw * J.y * stateAttitudeRatePitch) + messy.x;
+    (stateAttitudeRatePitch * J.m[2][2] * stateAttitudeRateYaw - 
+    stateAttitudeRateYaw * J.m[1][1] * stateAttitudeRatePitch) + messy.x;
   M.y = -self->kR_xy * eR.y + self->kw_xy * ew.y + 
-    (stateAttitudeRateYaw * J.x * stateAttitudeRateRoll - 
-    stateAttitudeRateRoll * J.z * stateAttitudeRateYaw) + messy.y;
+    (stateAttitudeRateYaw * J.m[0][0] * stateAttitudeRateRoll - 
+    stateAttitudeRateRoll * J.m[2][2] * stateAttitudeRateYaw) + messy.y;
   M.z = -self->kR_z  * eR.z + self->kw_z  * ew.z + 
-    (stateAttitudeRateRoll * J.y * stateAttitudeRatePitch - 
-    stateAttitudeRatePitch * J.x * stateAttitudeRateRoll) + messy.z;
+    (stateAttitudeRateRoll * J.m[1][1] * stateAttitudeRatePitch - 
+    stateAttitudeRatePitch * J.m[0][0] * stateAttitudeRateRoll) + messy.z;
 
   // Output
   if (setpoint->mode.z == modeDisable) {
