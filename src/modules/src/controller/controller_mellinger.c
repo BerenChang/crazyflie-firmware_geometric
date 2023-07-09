@@ -129,6 +129,11 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
   float dt;
   float desiredYaw = 0; //deg
 
+  struct mat33 inertia_J = mdiag(1.43e-5, 1.43e-5, 2.89e-5);
+  float J.x = 1.43e-5;
+  float J.y = 1.43e-5;
+  float J.z = 2.89e-5;
+
   control->controlMode = controlModeLegacy;
 
   if (!RATE_DO_EXECUTE(ATTITUDE_RATE, stabilizerStep)) {
@@ -248,21 +253,24 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
   float err_d_roll = 0;
   float err_d_pitch = 0;
 
+  float setpointAttitudeRateRoll = radians(setpoint->attitudeRate.roll);
+  float setpointAttitudeRatePitch = -radians(setpoint->attitudeRate.pitch);
+  float setpointAttitudeRateYaw = radians(setpoint->attitudeRate.yaw);
   float stateAttitudeRateRoll = radians(sensors->gyro.x);
   float stateAttitudeRatePitch = -radians(sensors->gyro.y);
   float stateAttitudeRateYaw = radians(sensors->gyro.z);
 
-  ew.x = radians(setpoint->attitudeRate.roll) - stateAttitudeRateRoll;
-  ew.y = -radians(setpoint->attitudeRate.pitch) - stateAttitudeRatePitch;
-  ew.z = radians(setpoint->attitudeRate.yaw) - stateAttitudeRateYaw;
+  ew.x = setpointAttitudeRateRoll - stateAttitudeRateRoll;
+  ew.y = setpointAttitudeRatePitch - stateAttitudeRatePitch;
+  ew.z = setpointAttitudeRateYaw - stateAttitudeRateYaw;
   if (self->prev_omega_roll == self->prev_omega_roll) { /*d part initialized*/
     err_d_roll = ((radians(setpoint->attitudeRate.roll) - self->prev_setpoint_omega_roll) - (stateAttitudeRateRoll - self->prev_omega_roll)) / dt;
     err_d_pitch = (-(radians(setpoint->attitudeRate.pitch) - self->prev_setpoint_omega_pitch) - (stateAttitudeRatePitch - self->prev_omega_pitch)) / dt;
   }
   self->prev_omega_roll = stateAttitudeRateRoll;
   self->prev_omega_pitch = stateAttitudeRatePitch;
-  self->prev_setpoint_omega_roll = radians(setpoint->attitudeRate.roll);
-  self->prev_setpoint_omega_pitch = radians(setpoint->attitudeRate.pitch);
+  self->prev_setpoint_omega_roll = setpointAttitudeRateRoll;
+  self->prev_setpoint_omega_pitch = setpointAttitudeRatePitch;
 
   // Integral Error
   self->i_error_m_x += (-eR.x) * dt;
@@ -278,6 +286,72 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
   M.x = -self->kR_xy * eR.x + self->kw_xy * ew.x + self->ki_m_xy * self->i_error_m_x + self->kd_omega_rp * err_d_roll;
   M.y = -self->kR_xy * eR.y + self->kw_xy * ew.y + self->ki_m_xy * self->i_error_m_y + self->kd_omega_rp * err_d_pitch;
   M.z = -self->kR_z  * eR.z + self->kw_z  * ew.z + self->ki_m_z  * self->i_error_m_z;
+
+  // Geometric Controller for Moment
+  // Formula: -kR * eR - kw * ew + w x Jw - J(ew x R^T Rd wd - R^T Rd \dot{wd})
+
+  struct vec A = vadd4(vneg(mvmul(mdiag(self->kp_xy, self->kp_xy, self->kp_z), r_error)),
+    vneg(mvmul(mdiag(self->kd_xy, self->kd_xy, self->kd_z), v_error)),
+    vneg(mkvec(0, 0, self->mass * GRAVITY_MAGNITUDE)),
+    mkvec(self->mass*setpoint->acceleration.x, self->mass*setpoint->acceleration.y, self->mass*setpoint->acceleration.z));
+  struct vec A_dot = vadd(vneg(mvmul(mdiag(self->kp_xy, self->kp_xy, self->kp_z), v_error)),
+    vneg(mvmul(mdiag(self->kd_xy, self->kd_xy, self->kd_z), setpoint->acceleration - state->acc)));
+  struct vec A_ddot = vneg(mvmul(mdiag(self->kp_xy, self->kp_xy, self->kp_z), setpoint->acceleration - state->acc));
+
+  struct vec b_3c = vneg(vnormalize(A));
+  struct vec b_3c_dot = vadd(vneg(vdiv(A_dot, vmag(A))),
+    vdiv(vscl(vdot(A, A_dot), A), pow(vmag(A), 3)));
+  struct vec b_3c_ddot = vadd4(vneg(vdiv(A_ddot, vmag(A))),
+    vdiv(vscl(2, vscl(vdot(A, A_dot), A_dot)), pow(vmag(A), 3)),
+    vdiv(vscl((vdot(A_dot, A_dot) + vdot(A, A_ddot)), A), pow(vmag(A), 3)),
+    vneg(vdiv(vscl(3, vscl(pow(vdot(A, A_dot), 2), A_dot)), pow(vmag(A), 5))));
+
+  struct vec b2 = vcross(b_3c, b_1d);
+  struct vec b2_dot = vadd(vcross(b_3c_dot, b_1d),
+    vcross(b_3c, b_1d_dot));
+  struct vec b2_ddot = vadd3(vcross(b_3c_ddot, b_1d),
+    vscl(2, vcross(b_3c_dot, b_1d_dot)),
+    vcross(b_3c, b_1d_ddot));
+
+  struct vec b_1c = vneg(vdiv(vcross(b_3c, b2), vmag(b2)));
+  struct vec b_1c_dot = vadd3(vneg(vcross(b_3c_dot, b2)),
+    vdiv(vcross(b_3c, b2), vmag(b2)), 
+    vdiv(vscl(vcross(b_3c, b2), vdot(b2_dot, b2)), pow(vmag(b2), 3)));
+  
+  struct vec m1 = vadd3(vcross(b_3c_ddot, b2),
+    vscl(2, vcross(b_3c_dot, b2_dot)),
+    vdiv(vcross(b_3c, b2_ddot), vmag(b2)));
+  struct vec m2 = vadd(vcross(b_3c_dot, b2),
+    vscl(vdot(b2_dot, b2) / pow(vmag(b2), 3), vcross(b_3c, b2_dot)));
+  struct vec m_dot = vadd(m1, vneg(m2));
+
+  struct vec n1 = vscl(vdot(b2_dot, b2), vcross(b_3c, b2));
+  struct vec n1_dot = vadd3(vcross(b_3c_dot, b2),
+    vscl(vdot(b2_dot, b2), vcross(b_3c, b2_dot)),
+    vscl(vdot(b2_ddot, b2) + vdot(b2_dot, b2_dot), vcross(b_3c, b2)));
+  struct vec n_dot = vadd(vdiv(n1_dot, pow(vmag(b2), 3)),
+    vneg(vscl(3*vdot(b2_dot, b2)/pow(vmag(b2), 5), n1)));
+  struct vec b_1c_ddot = vadd(vneg(m_dot), n_dot);
+  
+  struct mat33 Rc = mcolumns(b_1c, vcross(b_3c, b_1c), b_3c);
+  struct mat33 Rc_dot = mcolumns(b_1c_dot, vadd(vcross(b_3c_dot, b_1c), vcross(b_3c, b_1c_dot)), b_3c_dot);
+  struct mat33 Rc_ddot = mcolumns(b_1c_ddot, vadd3(vcross(b_3c_ddot, b_1c), vscl(2, vcross(b_3c_dot, b_1c_dot)), vcross(b_3c, b_1c_ddot)), b_3c_ddot);
+  
+  struct vec w_c = vee(mmul(mtranspose(Rc), Rc_dot));
+  struct vec w_c_dot = vee(vadd(mmul(mtranspose(Rc_dot), Rc_dot), mmul(mtranspose(Rc), Rc_ddot)));
+
+  // messy = J (hat(ew)*R^T*Rd*wd - R^T*Rd*wd_dot)
+  struct vec messy = mvmul(J, vsub((mmul(mmul(mmul(mcrossmat(ew), mtranspose(R)), Rc), w_c), mmul(mmul(mtranpose(R), Rc), w_c_dot))));
+
+  M.x = -self->kR_xy * eR.x + self->kw_xy * ew.x + 
+    (stateAttitudeRatePitch * J.z * stateAttitudeRateYaw - 
+    stateAttitudeRateYaw * J.y * stateAttitudeRatePitch) + messy.x;
+  M.y = -self->kR_xy * eR.y + self->kw_xy * ew.y + 
+    (stateAttitudeRateYaw * J.x * stateAttitudeRateRoll - 
+    stateAttitudeRateRoll * J.z * stateAttitudeRateYaw) + messy.y;
+  M.z = -self->kR_z  * eR.z + self->kw_z  * ew.z + 
+    (stateAttitudeRateRoll * J.y * stateAttitudeRatePitch - 
+    stateAttitudeRatePitch * J.x * stateAttitudeRateRoll) + messy.z;
 
   // Output
   if (setpoint->mode.z == modeDisable) {

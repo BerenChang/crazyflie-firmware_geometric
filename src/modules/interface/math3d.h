@@ -417,6 +417,11 @@ static inline struct vec mrow(struct mat33 m, int row) {
 // operators
 //
 
+// vee operator
+static inline struct vec vee(struct mat33 m) {
+	return mkvec(m.m[2][1], m.m[0][2], m.m[1][0]);
+}
+
 // matrix transpose.
 static inline struct mat33 mtranspose(struct mat33 m) {
 	struct mat33 mt;
