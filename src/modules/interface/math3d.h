@@ -169,6 +169,10 @@ static inline struct vec veltdiv(struct vec a, struct vec b) {
 static inline struct vec veltrecip(struct vec a) {
 	return mkvec(1.0f / a.x, 1.0f / a.y, 1.0f / a.z);
 }
+// element-wise vector squared.
+static inline float veltsqr(struct vec v) {
+	return mkvec(v.x*v.x, v.y*v.y, v.z*v.z)
+}
 // vector magnitude squared.
 static inline float vmag2(struct vec v) {
 	return vdot(v, v);

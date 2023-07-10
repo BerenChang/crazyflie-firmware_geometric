@@ -170,7 +170,8 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
     // In case of a timeout, the commander tries to level, ie. x/y are disabled, but z will use the previous setting
     // In that case we ignore the last feedforward term for acceleration
     if (setpoint->mode.z == modeAbs) {
-      target_thrust.z = self->mass * GRAVITY_MAGNITUDE + self->kp_z  * r_error.z + self->kd_z  * v_error.z + self->ki_z  * self->i_error_z;
+      // target_thrust.z = self->mass * GRAVITY_MAGNITUDE + self->kp_z  * r_error.z + self->kd_z  * v_error.z + self->ki_z  * self->i_error_z;
+      target_thrust.z = self->mass * GRAVITY_MAGNITUDE + self->kp_z  * r_error.z + self->kd_z  * v_error.z;
     } else {
       target_thrust.z = 1;
     }
@@ -300,9 +301,9 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
   struct vec b_3c_dot = vadd(vneg(vdiv(A_dot, vmag(A))),
     vdiv(vscl(vdot(A, A_dot), A), powf(vmag(A), 3)));
   struct vec b_3c_ddot = vadd4(vneg(vdiv(A_ddot, vmag(A))),
-    vdiv(vscl(2, vscl(vdot(A, A_dot), A_dot)), powf(vmag(A), 3)),
-    vdiv(vscl((vdot(A_dot, A_dot) + vdot(A, A_ddot)), A), powf(vmag(A), 3)),
-    vneg(vdiv(vscl(3, vscl(powf(vdot(A, A_dot), 2), A_dot)), powf(vmag(A), 5))));
+    vdiv(vscl(2, vdot(veltmul(A, A_dot), A_dot)), powf(vmag(A), 3)),
+    vdiv(vdot(vadd(veltmul(A_dot, A_dot), veltmul(A, A_ddot)), A), powf(vmag(A), 3)),
+    vneg(vdiv(vscl(3, vdot(veltsqr(veltmul(A, A_dot)), A_dot)), powf(vmag(A), 5))));
 
   struct vec b_1d = vzero();
   struct vec b_1d_dot = vzero();
@@ -317,7 +318,7 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
   struct vec b_1c = vneg(vdiv(vcross(b_3c, b2), vmag(b2)));
   struct vec b_1c_dot = vadd3(vneg(vcross(b_3c_dot, b2)),
     vdiv(vcross(b_3c, b2), vmag(b2)), 
-    vdiv(vscl(vdot(b2_dot, b2), vcross(b_3c, b2)), powf(vmag(b2), 3)));
+    vdiv(vdot(veltmul(b2_dot, b2), vcross(b_3c, b2)), powf(vmag(b2), 3)));
   
   struct vec m1 = vadd3(vcross(b_3c_ddot, b2),
     vscl(2, vcross(b_3c_dot, b2_dot)),
@@ -327,9 +328,7 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
   struct vec m_dot = vadd(m1, vneg(m2));
 
   struct vec n1 = vscl(vdot(b2_dot, b2), vcross(b_3c, b2));
-  struct vec n1_dot = vadd3(vcross(b_3c_dot, b2),
-    vscl(vdot(b2_dot, b2), vcross(b_3c, b2_dot)),
-    vscl(vdot(b2_ddot, b2) + vdot(b2_dot, b2_dot), vcross(b_3c, b2)));
+  struct vec n1_dot = vadd(vscl(vdot(b2_dot, b2), vadd(vcross(b_3c_dot, b2), vcross(b_3c, b2_dot))), vscl(vdot(b2_ddot, b2) + vdot(b2_dot, b2_dot), vcross(b_3c, b2)));
   struct vec n_dot = vadd(vdiv(n1_dot, powf(vmag(b2), 3)),
     vneg(vscl(3*vdot(b2_dot, b2)/powf(vmag(b2), 5), n1)));
   struct vec b_1c_ddot = vadd(vneg(m_dot), n_dot);
