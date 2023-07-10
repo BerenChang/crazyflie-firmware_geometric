@@ -342,7 +342,7 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
   struct vec w_c_dot = vee(vadd(mmul(mtranspose(Rc_dot), Rc_dot), mmul(mtranspose(Rc), Rc_ddot)));
 
   // messy = J (hat(ew)*R^T*Rd*wd - R^T*Rd*wd_dot)
-  struct vec messy = mvmul(J, vsub((mmul(mmul(mmul(mcrossmat(ew), mtranspose(R)), Rc), w_c), mmul(mmul(mtranpose(R), Rc), w_c_dot))));
+  struct vec messy = mvmul(J, vsub(mvmul(mmul(mmul(mcrossmat(ew), mtranspose(R)), Rc), w_c), mvmul(mmul(mtranpose(R), Rc), w_c_dot)));
 
   M.x = -self->kR_xy * eR.x + self->kw_xy * ew.x + 
     (stateAttitudeRatePitch * J.m[2][2] * stateAttitudeRateYaw - 
