@@ -171,7 +171,7 @@ static inline struct vec veltrecip(struct vec a) {
 }
 // element-wise vector squared.
 static inline float veltsqr(struct vec v) {
-	return mkvec(v.x*v.x, v.y*v.y, v.z*v.z);
+	return mkvec(powf(v.x), powf(v.y), powf(v.z));
 }
 // vector magnitude squared.
 static inline float vmag2(struct vec v) {
