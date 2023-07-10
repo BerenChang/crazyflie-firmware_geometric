@@ -304,9 +304,9 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
     vdiv(vscl((vdot(A_dot, A_dot) + vdot(A, A_ddot)), A), pow(vmag(A), 3)),
     vneg(vdiv(vscl(3, vscl(pow(vdot(A, A_dot), 2), A_dot)), pow(vmag(A), 5))));
 
-  struct vec b_1d = mzero();
-  struct vec b_1d_dot = mzero();
-  struct vec b_1d_ddot = mzero();
+  struct vec b_1d = vzero();
+  struct vec b_1d_dot = vzero();
+  struct vec b_1d_ddot = vzero();
   struct vec b2 = vcross(b_3c, b_1d);
   struct vec b2_dot = vadd(vcross(b_3c_dot, b_1d),
     vcross(b_3c, b_1d_dot));
