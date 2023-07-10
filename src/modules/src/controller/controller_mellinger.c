@@ -339,7 +339,7 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
   struct mat33 Rc_ddot = mcolumns(b_1c_ddot, vadd3(vcross(b_3c_ddot, b_1c), vscl(2, vcross(b_3c_dot, b_1c_dot)), vcross(b_3c, b_1c_ddot)), b_3c_ddot);
   
   struct vec w_c = vee(mmul(mtranspose(Rc), Rc_dot));
-  struct vec w_c_dot = vee(vadd(mmul(mtranspose(Rc_dot), Rc_dot), mmul(mtranspose(Rc), Rc_ddot)));
+  struct vec w_c_dot = vee(madd(mmul(mtranspose(Rc_dot), Rc_dot), mmul(mtranspose(Rc), Rc_ddot)));
 
   // messy = J (hat(ew)*R^T*Rd*wd - R^T*Rd*wd_dot)
   struct vec messy = mvmul(J, vsub(mvmul(mmul(mmul(mcrossmat(ew), mtranspose(R)), Rc), w_c), mvmul(mmul(mtranspose(R), Rc), w_c_dot)));
