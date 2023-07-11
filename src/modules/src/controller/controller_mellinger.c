@@ -301,9 +301,9 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
   struct vec b_3c_dot = vadd(vneg(vdiv(A_dot, vmag(A))),
     vdiv(vscl(vdot(A, A_dot), A), powf(vmag(A), 3)));
   struct vec b_3c_ddot = vadd4(vneg(vdiv(A_ddot, vmag(A))),
-    vdiv(vscl(2, vdot(veltmul(A, A_dot), A_dot)), powf(vmag(A), 3)),
+    vdiv(vscl(2 * vdot(A, A_dot), A_dot), powf(vmag(A), 3)),
     vdiv(vdot(vadd(veltmul(A_dot, A_dot), veltmul(A, A_ddot)), A), powf(vmag(A), 3)),
-    vneg(vdiv(vscl(3, vdot(veltsqr(veltmul(A, A_dot)), A_dot)), powf(vmag(A), 5))));
+    vneg(vdiv(vscl(3, powf(vscl(vdot(A, A_dot), A)), 2), powf(vmag(A), 5))));
 
   struct vec b_1d = vzero();
   struct vec b_1d_dot = vzero();
@@ -314,7 +314,24 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
   struct vec b2_ddot = vadd3(vcross(b_3c_ddot, b_1d),
     vscl(2, vcross(b_3c_dot, b_1d_dot)),
     vcross(b_3c, b_1d_ddot));
+  
+  struct vec b_2c = vneg(vnormalize(b2));
+  struct vec b_2c_dot = vadd(vneg(vdiv(b2_dot, vmag(b2))),
+    vdiv(vscl(vdot(b2, b2_dot), b2), powf(vmag(b2), 3)));
+  struct vec b_2c_ddot = vadd4(vneg(vdiv(b2_ddot, vmag(b2))),
+    vdiv(vscl(2 * vdot(b2, b2_dot), b2_dot), powf(vmag(b2), 3)),
+    vdiv(vdot(vadd(veltmul(b2_dot, b2_dot), veltmul(b2, b2_ddot)), b2), powf(vmag(b2), 3)),
+    vneg(vdiv(vscl(3, powf(vscl(vdot(b2, b2_dot), b2)), 2), powf(vmag(b2), 5))));
 
+  struct vec b_1c = vcross(b_2c, b_3c);
+  struct vec b_1c_dot = vadd(vcross(b_2c_dot, b_3c), vcross(b_2c, b_3c_dot));
+  struct vec b_1c_ddot = vadd3(vcross(b_2c_ddot, b_3c), vscl(2, vcross(b_2c_dot, b_3c_dot)), vcross(b_2c, b_3c_ddot));
+
+  struct mat33 Rc = mcolumns(b_1c, b_2c, b_3c);
+  struct mat33 Rc_dot = columns(b_1c_dot, b_2c_dot, b_3c_dot);
+  struct mat33 Rc_ddot = columns(b_1c_ddot, b_2c_ddot, b_3c_ddot);
+
+/*
   struct vec b_1c = vneg(vdiv(vcross(b_3c, b2), vmag(b2)));
   struct vec b_1c_dot = vadd3(vneg(vcross(b_3c_dot, b2)),
     vdiv(vcross(b_3c, b2), vmag(b2)), 
@@ -339,6 +356,7 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
   
   struct vec w_c = vee(mmul(mtranspose(Rc), Rc_dot));
   struct vec w_c_dot = vee(madd(mmul(mtranspose(Rc_dot), Rc_dot), mmul(mtranspose(Rc), Rc_ddot)));
+*/
 
   // messy = J (hat(ew)*R^T*Rd*wd - R^T*Rd*wd_dot)
   struct vec messy = mvmul(J, vsub(mvmul(mmul(mmul(mcrossmat(ew), mtranspose(R)), Rc), w_c), mvmul(mmul(mtranspose(R), Rc), w_c_dot)));
