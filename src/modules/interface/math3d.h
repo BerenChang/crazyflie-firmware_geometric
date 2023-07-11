@@ -157,10 +157,12 @@ static inline struct vec vsub(struct vec a, struct vec b) {
 static inline float vdot(struct vec a, struct vec b) {
 	return a.x * b.x + a.y * b.y + a.z * b.z;
 }
+/*
 // element-wise vector multiply.
 static inline struct vec veltmul(struct vec a, struct vec b) {
 	return mkvec(a.x * b.x, a.y * b.y, a.z * b.z);
 }
+*/
 // element-wise vector divide.
 static inline struct vec veltdiv(struct vec a, struct vec b) {
 	return mkvec(a.x / b.x, a.y / b.y, a.z / b.z);
