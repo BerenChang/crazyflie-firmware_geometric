@@ -328,8 +328,8 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
   struct vec b_1c_ddot = vadd3(vcross(b_2c_ddot, b_3c), vscl(2, vcross(b_2c_dot, b_3c_dot)), vcross(b_2c, b_3c_ddot));
 
   struct mat33 Rc = mcolumns(b_1c, b_2c, b_3c);
-  struct mat33 Rc_dot = columns(b_1c_dot, b_2c_dot, b_3c_dot);
-  struct mat33 Rc_ddot = columns(b_1c_ddot, b_2c_ddot, b_3c_ddot);
+  struct mat33 Rc_dot = mcolumns(b_1c_dot, b_2c_dot, b_3c_dot);
+  struct mat33 Rc_ddot = mcolumns(b_1c_ddot, b_2c_ddot, b_3c_ddot);
 
   struct vec w_c = vee(mmul(mtranspose(Rc), Rc_dot));
   struct vec w_c_dot = vee(madd(mmul(mtranspose(Rc_dot), Rc_dot), mmul(mtranspose(Rc), Rc_ddot)));
